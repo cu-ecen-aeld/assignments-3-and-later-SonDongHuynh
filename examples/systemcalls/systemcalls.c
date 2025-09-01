@@ -1,4 +1,8 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,7 +20,12 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    if(cmd == NULL) return false;
 
+    int ret = system(cmd);
+    if(ret != 0) {
+        return false;
+    }
     return true;
 }
 
@@ -47,7 +56,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,9 +67,28 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    fflush(stdout);
+    int status;
+    pid_t pid = fork();
+
+    if(pid == -1) {
+        return false;
+    }
+
+    if(pid == 0){
+        int ret = execv(command[0], command);
+        if(ret == -1) {
+            exit(EXIT_FAILURE);
+        }
+    }
+    else {
+        waitpid(pid, &status, 0);
+        if(WEXITSTATUS(status) != 0)
+            return false;
+        return true;
+    }
 
     va_end(args);
-
     return true;
 }
 
@@ -82,7 +110,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,6 +120,39 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+    if(fd < 0) {
+        abort();
+    }
+
+    if(command[0] == NULL || command[0][0] != '/') {
+        return false;
+    }
+
+    pid_t pid = fork();
+    int status;
+
+    if(pid == -1) {
+        return false;
+    }
+
+    if(pid == 0) {
+        if (dup2(fd,1) < 0)
+        {
+            abort();
+        }
+        close(fd);
+        if (execv(command[0], command) == -1){
+            exit(EXIT_FAILURE);
+        }
+        abort();
+    }
+    else {
+        waitpid(pid, &status, 0);
+        if(0 != WEXITSTATUS(status))
+            return false;
+        return true;
+    }
 
     va_end(args);
 
